@@ -1,28 +1,53 @@
 name: Gramps
+
 on: [push, workflow_dispatch]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
-        uses: actions/checkout@v2 # checkout the repository content to github runner
+      - name: Install gramps
+        run: sudo apt install gramps
+
+      - name: Fix bug
+        run: sudo sed -i 's/name.txt/database.txt/g' /usr/lib/python3/dist-packages/gramps/gen/db/generic.py
+
+      - name: Checkout
+        uses: actions/checkout@v3 # checkout the repository content to github runner
          
       - name: Build Gramps Narrated Website
-        run: |
-          # Workaround for bug in database name in Gramps generic.py
-          sudo apt install gramps
-          sudo sed -i 's/name.txt/database.txt/g' /usr/lib/python3/dist-packages/gramps/gen/db/generic.py
-          gramps -i Untitled_1.gpkg -a report -p name=navwebpage,target=./
+        run: gramps -i Untitled_1.gpkg -a report -p name=navwebpage,target=./site
 
-      - name: commit
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add -A
-          git commit -m "Gramps Update" -a
-          
-      - name: push
-        uses: ad-m/github-push-action@v0.6.0
+      - name: Setup pages
+        id: pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          path: ./site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
